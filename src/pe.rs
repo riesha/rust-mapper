@@ -1,12 +1,16 @@
 use std::{fs, str::from_utf8};
 
-use winapi::um::winnt::{IMAGE_DOS_HEADER, IMAGE_NT_HEADERS, IMAGE_SECTION_HEADER};
-#[derive(Debug, Clone)]
+use winapi::um::winnt::{
+    IMAGE_DATA_DIRECTORY, IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY, IMAGE_NT_HEADERS,
+    IMAGE_OPTIONAL_HEADER, IMAGE_OPTIONAL_HEADER32, IMAGE_SECTION_HEADER,
+};
+#[derive(Clone)]
 pub struct PEFile
 {
-    pub name:     String,
-    pub sections: Vec<Section>,
-    pub data:     Vec<u8>,
+    pub name:       String,
+    pub sections:   Vec<Section>,
+    pub data:       Vec<u8>,
+    pub opt_header: IMAGE_OPTIONAL_HEADER,
 }
 #[derive(Debug, Clone)]
 pub struct Section
@@ -27,6 +31,12 @@ impl PEFile
             (file.as_ptr().offset((*header).e_lfanew.try_into().unwrap()))
                 as *const IMAGE_NT_HEADERS
         };
+        let export_dir = unsafe { (*nt_header).OptionalHeader.DataDirectory };
+        let dirs: Vec<&IMAGE_DATA_DIRECTORY> = export_dir
+            .iter()
+            .filter(|dir| dir.VirtualAddress != 0)
+            .collect();
+
         let section_header = unsafe {
             (file.as_ptr().offset(
                 (*header).e_lfanew as isize + std::mem::size_of::<IMAGE_NT_HEADERS>() as isize,
@@ -57,9 +67,10 @@ impl PEFile
             })
         }
         PEFile {
-            name:     name.to_string(),
-            sections: sections,
-            data:     file,
+            name:       name.to_string(),
+            sections:   sections,
+            data:       file,
+            opt_header: unsafe { (*nt_header).OptionalHeader },
         }
     }
 }
